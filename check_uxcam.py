@@ -488,17 +488,21 @@ class EmailNotConfigured(Exception):
     """Raised when SMTP settings are absent - not an error, just an unused channel."""
 
 
+def env(name: str, default: str = "") -> str:
+    """Read an env var, treating empty/whitespace as absent.
+
+    CI systems set a variable to "" when the underlying secret does not exist,
+    so os.environ.get(name, default) would hand back "" rather than the default.
+    """
+    return (os.environ.get(name) or "").strip() or default
+
+
 def send_email(subject: str, text: str, html: str) -> None:
-    host = os.environ.get("SMTP_HOST")
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    user = os.environ.get("SMTP_USER")
-    password = os.environ.get("SMTP_PASSWORD")
-    sender = os.environ.get("MAIL_FROM", user or "")
-    recipients = [
-        addr.strip()
-        for addr in os.environ.get("MAIL_TO", "").split(",")
-        if addr.strip()
-    ]
+    host = env("SMTP_HOST")
+    user = env("SMTP_USER")
+    password = env("SMTP_PASSWORD")
+    sender = env("MAIL_FROM", user)
+    recipients = [addr.strip() for addr in env("MAIL_TO").split(",") if addr.strip()]
 
     missing = [
         name
@@ -512,6 +516,14 @@ def send_email(subject: str, text: str, html: str) -> None:
     ]
     if missing:
         raise EmailNotConfigured(f"missing: {', '.join(missing)}")
+
+    # Parsed only once the channel is known to be in use, so a stray value here
+    # can never mask an unconfigured-email situation.
+    raw_port = env("SMTP_PORT", "587")
+    try:
+        port = int(raw_port)
+    except ValueError as err:
+        raise RuntimeError(f"SMTP_PORT is not a number: {raw_port!r}") from err
 
     msg = EmailMessage()
     msg["Subject"] = subject

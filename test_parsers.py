@@ -5,6 +5,7 @@ Run: python3 test_parsers.py
 """
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -108,6 +109,27 @@ check("html includes changelog link", source["changelog"] in html, True)
 subject, text, _ = w.render_email([], [{"source": source, "version": "3.10.9"}], [])
 check("quiet run subject", subject, "[UXCam SDK] Status")
 check("quiet run body", "No new releases detected." in text, True)
+
+# --- CI passes empty strings for absent secrets, not unset vars -------------- #
+# Regression: GitHub Actions sets an env var to "" when its secret is absent, so
+# os.environ.get(name, default) returns "" and never the default. int("") then
+# crashed before the "is email configured?" check could run.
+for name in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM", "MAIL_TO"):
+    os.environ[name] = ""
+
+try:
+    w.send_email("s", "t", "<p>h</p>")
+    check("empty-string secrets raise EmailNotConfigured", "no exception", "EmailNotConfigured")
+except w.EmailNotConfigured as err:
+    check("empty-string secrets raise EmailNotConfigured", "EmailNotConfigured", "EmailNotConfigured")
+    check("names every missing setting", "SMTP_HOST" in str(err) and "MAIL_TO" in str(err), True)
+except Exception as err:
+    check(f"empty-string secrets raise EmailNotConfigured (got {type(err).__name__}: {err})",
+          type(err).__name__, "EmailNotConfigured")
+
+os.environ["SMTP_PORT"] = "   "
+check("whitespace-only env reads as absent", w.env("SMTP_PORT", "587"), "587")
+check("real value survives", w.env("PATH") != "", True)
 
 print()
 if failures:
