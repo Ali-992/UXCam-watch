@@ -1,0 +1,85 @@
+name: UXCam SDK watch
+
+on:
+  schedule:
+    # 06:00 UTC daily = 09:00 Riyadh
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_notify:
+        description: "Send the digest even if nothing changed"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: uxcam-sdk-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check UXCam SDK versions
+        id: check
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          FORCE: ${{ inputs.force_notify }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            python check_uxcam.py --force-notify
+          else
+            python check_uxcam.py
+          fi
+
+      - name: Commit updated state
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain state.json)" ]; then
+            git config user.name  "uxcam-sdk-watch"
+            git config user.email "actions@github.com"
+            git add state.json
+            git commit -m "chore: record UXCam SDK versions"
+            git pull --rebase --autostash
+            git push
+          else
+            echo "No state change to commit."
+          fi
+
+      - name: Open upgrade issue
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSIONS: ${{ steps.check.outputs.versions }}
+        run: |
+          {
+            echo "A new UXCam SDK release was detected by the daily watcher."
+            echo
+            echo "**Released:** $VERSIONS"
+            echo
+            echo "### Checklist"
+            echo "- [ ] Review the platform changelog for breaking changes and new privacy/occlusion APIs"
+            echo "- [ ] Bump the dependency on a feature branch"
+            echo "- [ ] Smoke test: session upload, screen tagging, user identity, custom events"
+            echo "- [ ] Verify PII occlusion still applies to all sensitive fields"
+            echo "- [ ] Check app size delta and cold-start impact"
+            echo "- [ ] Confirm sessions appear in the UXCam dashboard from a real device build"
+          } > issue-body.md
+
+          gh issue create \
+            --title "Upgrade UXCam SDK — $VERSIONS" \
+            --body-file issue-body.md
