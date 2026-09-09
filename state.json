@@ -1,0 +1,26 @@
+{
+  "last_run": "2026-09-09T17:35:47+00:00",
+  "sdks": {
+    "android": {
+      "coordinate": "com.uxcam:uxcam",
+      "first_detected": "2026-09-09T17:35:47+00:00",
+      "last_checked": "2026-09-09T17:35:47+00:00",
+      "published": "2026-08-25T07:33:20+00:00",
+      "version": "3.10.9"
+    },
+    "ios": {
+      "coordinate": "UXCam (CocoaPods)",
+      "first_detected": "2026-09-09T17:35:47+00:00",
+      "last_checked": "2026-09-09T17:35:47+00:00",
+      "published": "2026-09-08 11:49:03 UTC",
+      "version": "3.11.0"
+    },
+    "react-native": {
+      "coordinate": "react-native-ux-cam (npm)",
+      "first_detected": "2026-09-09T17:35:47+00:00",
+      "last_checked": "2026-09-09T17:35:47+00:00",
+      "published": null,
+      "version": "6.0.22"
+    }
+  }
+}
