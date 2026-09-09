@@ -23,9 +23,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -66,20 +66,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSIONS: ${{ steps.check.outputs.versions }}
         run: |
-          {
-            echo "A new UXCam SDK release was detected by the daily watcher."
-            echo
-            echo "**Released:** $VERSIONS"
-            echo
-            echo "### Checklist"
-            echo "- [ ] Review the platform changelog for breaking changes and new privacy/occlusion APIs"
-            echo "- [ ] Bump the dependency on a feature branch"
-            echo "- [ ] Smoke test: session upload, screen tagging, user identity, custom events"
-            echo "- [ ] Verify PII occlusion still applies to all sensitive fields"
-            echo "- [ ] Check app size delta and cold-start impact"
-            echo "- [ ] Confirm sessions appear in the UXCam dashboard from a real device build"
-          } > issue-body.md
-
           gh issue create \
             --title "Upgrade UXCam SDK — $VERSIONS" \
-            --body-file issue-body.md
+            --body-file issue_body.md

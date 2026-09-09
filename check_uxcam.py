@@ -444,6 +444,50 @@ def render_email(changes: list[dict], unchanged: list[dict], errors: list[dict])
     return subject, text, html
 
 
+def render_issue_body(changes: list[dict]) -> str:
+    """Markdown body for the GitHub issue - the primary alert channel."""
+    lines = [
+        "A new UXCam SDK release was detected by the daily watcher.",
+        "",
+        "| Platform | Previous | New | Changelog |",
+        "|---|---|---|---|",
+    ]
+    for c in changes:
+        s = c["source"]
+        lines.append(
+            f"| {s['label']} | `{c['previous']}` | **`{c['version']}`** | "
+            f"[Release notes]({s['changelog']}) |"
+        )
+
+    lines += ["", "### Upgrade", "", "```"]
+    lines += [c["source"]["install_hint"].format(version=c["version"]) for c in changes]
+    lines += ["```", ""]
+
+    published = [c for c in changes if c.get("published")]
+    if published:
+        lines.append("<sub>Published: " + ", ".join(
+            f"{c['source']['label']} {c['published']}" for c in published
+        ) + "</sub>")
+        lines.append("")
+
+    lines += [
+        "### QA checklist",
+        "",
+        "- [ ] Review the changelog for breaking changes and new privacy/occlusion APIs",
+        "- [ ] Bump the dependency on a feature branch",
+        "- [ ] Smoke test: session upload, screen tagging, user identity, custom events",
+        "- [ ] Verify PII occlusion still applies to all sensitive fields",
+        "- [ ] Check app size delta and cold-start impact",
+        "- [ ] Confirm sessions appear in the UXCam dashboard from a real device build",
+        "- [ ] Regression pass on the flows most dependent on session recording",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+class EmailNotConfigured(Exception):
+    """Raised when SMTP settings are absent - not an error, just an unused channel."""
+
+
 def send_email(subject: str, text: str, html: str) -> None:
     host = os.environ.get("SMTP_HOST")
     port = int(os.environ.get("SMTP_PORT", "587"))
@@ -467,7 +511,7 @@ def send_email(subject: str, text: str, html: str) -> None:
         if not value
     ]
     if missing:
-        raise RuntimeError(f"Email not configured; missing: {', '.join(missing)}")
+        raise EmailNotConfigured(f"missing: {', '.join(missing)}")
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -519,19 +563,29 @@ def main() -> int:
     if args.dry_run or args.seed:
         should_notify = False
 
+    exit_code = 0
+
     if should_notify:
         subject, text, html = render_email(changes, unchanged, errors)
         try:
             send_email(subject, text, html)
+        except EmailNotConfigured as err:
+            # Expected when the GitHub issue is the alert channel. Not a failure.
+            print(f"Email channel not configured ({err}); relying on the GitHub issue.")
+            print("--- digest ---")
+            print(text)
         except Exception as err:  # noqa: BLE001
             print(f"ERROR: failed to send email: {err}")
             print("--- message that would have been sent ---")
             print(text)
-            return 2
+            exit_code = 2
 
     if not args.dry_run:
         save_state(state_path, build_new_state(changes + unchanged, state))
         print(f"State written to {state_path}")
+
+    if changes:
+        Path("issue_body.md").write_text(render_issue_body(changes), encoding="utf-8")
 
     # Surface the outcome to CI without failing the job on a normal "new release".
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -544,7 +598,7 @@ def main() -> int:
                 + "\n"
             )
 
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

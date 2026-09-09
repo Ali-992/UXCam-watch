@@ -1,8 +1,9 @@
 # UXCam SDK Watch
 
-Daily check for new UXCam SDK releases, with an email alert and an auto-created
-"Upgrade UXCam SDK" issue. Backup for the fact that UXCam publishes no release
-notification of its own.
+Daily check for new UXCam SDK releases. On a change it opens an "Upgrade UXCam
+SDK" issue — GitHub emails you about it automatically — and can optionally send
+its own formatted digest over SMTP. Backup for the fact that UXCam publishes no
+release notification of its own.
 
 Stdlib-only Python — no dependencies to install or keep patched.
 
@@ -28,34 +29,52 @@ polled because they carry no stable machine-readable feed.
 
 1. Push this folder to a repo (public or private — Actions minutes are free on
    public repos, and this job takes seconds).
-2. Add these repository secrets under **Settings → Secrets and variables →
-   Actions**:
-
-   | Secret | Example | Notes |
-   |---|---|---|
-   | `SMTP_HOST` | `smtp.office365.com` | `smtp.gmail.com` for Gmail |
-   | `SMTP_PORT` | `587` | `465` switches the script to implicit SSL |
-   | `SMTP_USER` | `you@company.com` | |
-   | `SMTP_PASSWORD` | app password | **Not** your account password — generate an app password / mail-app credential |
-   | `MAIL_FROM` | `you@company.com` | Optional, defaults to `SMTP_USER` |
-   | `MAIL_TO` | `you@company.com,qa-team@company.com` | Comma-separated |
-
+2. **Settings → Actions → General → Workflow permissions → Read and write
+   permissions.** Without this the state commit and the issue creation fail with
+   a `403` while the run still shows green.
 3. Run the workflow once manually (**Actions → UXCam SDK watch → Run workflow**).
-   The first run seeds `state.json` with today's versions and sends nothing.
-   Every run after that alerts only on a change.
+   The first run seeds `state.json` with today's versions and alerts on nothing.
+   Every run after that opens an issue only when a version actually changes.
+
+That's the whole setup. The alert reaches you as a GitHub notification for the
+new issue — no credentials, nothing to rotate.
+
+## Optional: SMTP digest
+
+Skip this unless you want the formatted HTML email in addition to the issue.
+Without these secrets the script logs the digest and carries on; it does not
+fail.
+
+| Secret | Example | Notes |
+|---|---|---|
+| `SMTP_HOST` | `smtp.gmail.com` | |
+| `SMTP_PORT` | `587` | `465` switches the script to implicit SSL |
+| `SMTP_USER` | `you@gmail.com` | |
+| `SMTP_PASSWORD` | app password | **Not** your account password |
+| `MAIL_FROM` | `you@gmail.com` | Optional, defaults to `SMTP_USER` |
+| `MAIL_TO` | `you@company.com,qa-team@company.com` | Comma-separated |
+
+**Consumer Outlook.com and Hotmail no longer work here.** Microsoft rejects the
+login with `535 5.7.139 Authentication unsuccessful, basic authentication is
+disabled`, and no account setting re-enables it. Gmail app passwords work from
+CI runners; a transactional service (Brevo, SendGrid) is the sturdier option if
+this ever becomes team infrastructure.
 
 The cron is `0 6 * * *` — 09:00 Riyadh. GitHub's scheduler can drift by a few
 minutes to an hour under load; that is fine for a release watcher.
 
 ## What happens on a new release
 
-1. Email lands with the old → new version, the exact upgrade line, and a link to
-   the platform changelog.
-2. A GitHub issue is opened titled `Upgrade UXCam SDK — <platform> <version>`
-   with a QA regression checklist (session upload, screen tagging, PII occlusion,
-   app size, cold start).
+1. A GitHub issue is opened titled `Upgrade UXCam SDK — <platform> <version>`,
+   containing a version table, the exact upgrade lines, changelog links, and a QA
+   regression checklist. GitHub emails you about the new issue.
+2. If SMTP is configured, the same digest also arrives as formatted email.
 3. `state.json` is committed back, so the next run compares against the new
    baseline and does not re-alert.
+
+If you don't get the issue notification, check **github.com/settings/notifications**
+— "Email" must be ticked under *Watching*, and the repo must be Watched (it is by
+default for repos you own).
 
 If you'd rather the ticket land in Jira, replace the *Open upgrade issue* step
 with a `curl` to `POST /rest/api/3/issue` using a Jira API token secret — the
@@ -79,8 +98,10 @@ export SMTP_HOST=smtp.office365.com SMTP_PORT=587 \
 python3 check_uxcam.py --force-notify
 ```
 
-If SMTP is unreachable or unconfigured the script prints the message it would
-have sent and exits `2` — the check itself still tells you the versions.
+If SMTP is unconfigured the script prints the digest and exits `0` — that is the
+normal mode when the GitHub issue is your alert. If SMTP *is* configured but the
+send fails, it prints the message it would have sent and exits `2`, so a broken
+credential is loud rather than silent.
 
 ## Adding a platform
 
