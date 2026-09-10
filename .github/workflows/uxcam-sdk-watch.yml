@@ -3,7 +3,7 @@ name: UXCam SDK watch
 on:
   schedule:
     # 06:00 UTC daily = 09:00 Riyadh
-    - cron: "0 6 * * *"
+    - cron: "23 6 * * *"
   workflow_dispatch:
     inputs:
       force_notify:
